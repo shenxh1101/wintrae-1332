@@ -217,7 +217,17 @@ export const storage = {
     if (!success) return false;
     
     if (item.category === 'prop' && item.effect) {
-      await this.addItemToInventory(itemId, item.effect.value);
+      let inventoryKey = itemId;
+      if (item.effect.type === 'hint') {
+        inventoryKey = 'prop_hint_1';
+      } else if (item.effect.type === 'skip') {
+        inventoryKey = 'prop_skip_1';
+      } else if (item.effect.type === 'double_coin') {
+        inventoryKey = 'prop_double_coin';
+      } else if (item.effect.type === 'time_extend') {
+        inventoryKey = 'prop_time_extend';
+      }
+      await this.addItemToInventory(inventoryKey, item.effect.value);
     } else if (item.category === 'outfit') {
       await this.unlockOutfit(itemId);
       const updatedItems = items.map(i => 

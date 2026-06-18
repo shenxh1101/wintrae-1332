@@ -5,7 +5,7 @@ import { usePlayerStore } from '@/store/usePlayerStore';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import db from '@/db';
-import type { QuestionType, DailyStats, DifficultyLevel, WrongQuestion } from '@/types';
+import type { QuestionType, DailyStats, DifficultyLevel, WrongQuestion, Question } from '@/types';
 import { formatDate } from '@/utils/helpers';
 
 const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
@@ -75,6 +75,49 @@ const ParentPage: React.FC = () => {
     } catch (error) {
       console.error('加载数据失败:', error);
     }
+  };
+
+  const wrongQuestionToQuestion = (wq: WrongQuestion): Question => {
+    return {
+      id: wq.id,
+      type: wq.type,
+      difficulty: 3,
+      content: wq.content,
+      answer: wq.correctAnswer,
+      hint: '仔细想想，这次一定能做对！',
+      inputType: 'click',
+      options: undefined,
+      data: {}
+    };
+  };
+
+  const handlePracticeSingleWrong = (wq: WrongQuestion) => {
+    const question = wrongQuestionToQuestion(wq);
+    navigate('/game', {
+      state: {
+        mode: 'practice',
+        questionTypes: [wq.type],
+        questionCount: 1,
+        enableAdaptive: false,
+        customQuestions: [question],
+        isWrongQuestionPractice: true
+      }
+    });
+  };
+
+  const handlePracticeAllWrong = () => {
+    if (wrongQuestions.length === 0) return;
+    const questions = wrongQuestions.map(wq => wrongQuestionToQuestion(wq));
+    navigate('/game', {
+      state: {
+        mode: 'practice',
+        questionTypes: Array.from(new Set(wrongQuestions.map(w => w.type))),
+        questionCount: questions.length,
+        enableAdaptive: false,
+        customQuestions: questions,
+        isWrongQuestionPractice: true
+      }
+    });
   };
 
   const toggleType = (type: QuestionType) => {
@@ -498,9 +541,20 @@ const ParentPage: React.FC = () => {
 
               <Card>
                 <div className="p-6">
-                  <h3 className="text-2xl font-display font-bold text-gray-700 mb-4">
-                    ⚠️ 常错题
-                  </h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-2xl font-display font-bold text-gray-700">
+                      ⚠️ 常错题
+                    </h3>
+                    {wrongQuestions.length > 0 && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handlePracticeAllWrong}
+                      >
+                        🔄 重练全部 ({wrongQuestions.length})
+                      </Button>
+                    )}
+                  </div>
                   {wrongQuestions.length > 0 ? (
                     <div className="space-y-3 max-h-96 overflow-y-auto">
                       {wrongQuestions.map((q, index) => (
@@ -530,6 +584,13 @@ const ParentPage: React.FC = () => {
                                 <span className="text-success-600">正确答案: {q.correctAnswer}</span>
                               </div>
                             </div>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => handlePracticeSingleWrong(q)}
+                            >
+                              📝 重练
+                            </Button>
                           </div>
                         </motion.div>
                       ))}

@@ -26,9 +26,11 @@ export const MultiplicationQuestion: React.FC<MultiplicationQuestionProps> = ({
     setTimeout(() => onSubmit(answer), 300);
   }, [disabled, onSubmit]);
 
-  const { num1, num2 } = question.data || {};
+  const { num1 = 0, num2 = 0 } = question.data || {};
+  const displayNum1 = num1 > 0 ? num1 : (question.displayData?.numbers?.[0] ?? 0);
+  const displayNum2 = num2 > 0 ? num2 : (question.displayData?.numbers?.[1] ?? 0);
   const answer = typeof question.answer === 'number' ? question.answer : parseInt(String(question.answer), 10);
-  const options = generateOptions(answer);
+  const options = question.options?.length ? question.options as number[] : generateOptions(answer);
 
   return (
     <div className="w-full max-w-4xl mx-auto">
@@ -46,7 +48,7 @@ export const MultiplicationQuestion: React.FC<MultiplicationQuestionProps> = ({
             transition={{ delay: 0.1, type: 'spring' }}
             className="bg-reward-100 px-6 py-4 rounded-3xl text-reward-600 min-w-[120px]"
           >
-            {num1}
+            {displayNum1}
           </motion.span>
           <motion.span
             initial={{ scale: 0 }}
@@ -62,7 +64,7 @@ export const MultiplicationQuestion: React.FC<MultiplicationQuestionProps> = ({
             transition={{ delay: 0.5, type: 'spring' }}
             className="bg-reward-100 px-6 py-4 rounded-3xl text-reward-600 min-w-[120px]"
           >
-            {num2}
+            {displayNum2}
           </motion.span>
           <motion.span
             initial={{ scale: 0 }}

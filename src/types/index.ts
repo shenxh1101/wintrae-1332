@@ -92,6 +92,7 @@ export interface GameRecord {
   maxCombo: number;
   playTime: number;
   createdAt: number;
+  perTypeStats?: Record<string, { total: number; correct: number }>;
 }
 
 export interface WrongQuestion {

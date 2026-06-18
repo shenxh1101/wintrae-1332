@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { GameState, GameResult, GameMode, Level, QuestionType, DifficultyLevel } from '@/types';
+import type { GameState, GameResult, GameMode, Level, QuestionType, DifficultyLevel, Question } from '@/types';
 import gameEngine from '@/engine/gameEngine';
 
 interface GameStore {
@@ -24,7 +24,8 @@ interface GameStore {
     difficulty?: DifficultyLevel,
     questionCount?: number,
     timeLimit?: number,
-    enableAdaptive?: boolean
+    enableAdaptive?: boolean,
+    customQuestions?: Question[]
   ) => Promise<void>;
   submitAnswer: (answer: string | number) => void;
   nextQuestion: () => void;
@@ -55,10 +56,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   hintText: null,
   showResult: false,
 
-  initGame: async (mode, level, questionTypes, difficulty, questionCount, timeLimit, enableAdaptive) => {
+  initGame: async (mode, level, questionTypes, difficulty, questionCount, timeLimit, enableAdaptive, customQuestions) => {
     set({ isLoading: true, error: null, showResult: false, gameResult: null });
     try {
-      await gameEngine.initGame(mode, level, questionTypes, difficulty, questionCount, timeLimit, enableAdaptive);
+      await gameEngine.initGame(mode, level, questionTypes, difficulty, questionCount, timeLimit, enableAdaptive, customQuestions);
       set({ engineState: gameEngine.getState(), isLoading: false });
     } catch (error) {
       set({
@@ -98,7 +99,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   useHint: async () => {
     const playerStore = usePlayerStore.getState();
     const inventory = playerStore.playerData.inventory;
-    const hintCount = inventory['prop_hint_1'] || inventory['prop_hint_5'] || 0;
+    const hintCount = inventory['prop_hint_1'] || 0;
     
     if (hintCount <= 0) {
       return false;
@@ -181,8 +182,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   tick: () => {
+    const prevGameOver = gameEngine.getState().isGameOver;
     gameEngine.tick();
-    set({ engineState: gameEngine.getState() });
+    const newState = gameEngine.getState();
+    set({ engineState: newState });
+    
+    if (!prevGameOver && newState.isGameOver) {
+      setTimeout(() => {
+        get().endGame();
+      }, 0);
+    }
   },
 
   closeResult: () => {

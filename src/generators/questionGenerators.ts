@@ -70,6 +70,7 @@ function generateMultiplicationQuestion(difficulty: DifficultyLevel): Question {
     options: generateOptions(answer, 4, [-10, 10]),
     hint: `想想乘法口诀，${a} 乘 ${b} 等于多少？`,
     inputType: 'click',
+    data: { num1: a, num2: b, result: answer, operator: 'multiplication' },
     displayData: {
       expression: `${a} × ${b} = ?`,
       numbers: [a, b],

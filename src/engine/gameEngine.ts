@@ -34,6 +34,9 @@ class GameEngine {
   private soundEnabled: boolean = true;
   private gameStartTime: number = 0;
   private listeners: Set<() => void> = new Set();
+  private perTypeStats: Record<string, { total: number; correct: number }> = {};
+  private correctQuestionIds: Set<string> = new Set();
+  private customQuestionsMode: boolean = false;
 
   constructor() {
     this.state = this.getInitialState();
@@ -93,7 +96,8 @@ class GameEngine {
     difficulty?: DifficultyLevel,
     questionCount?: number,
     timeLimit?: number,
-    enableAdaptive?: boolean
+    enableAdaptive?: boolean,
+    customQuestions?: Question[]
   ): Promise<void> {
     const settings = await storage.getUserSettings();
     this.voiceEnabled = settings.voiceEnabled;
@@ -105,7 +109,16 @@ class GameEngine {
     let tLimit: number;
     let adaptive: boolean;
 
-    if (mode === 'adventure' && level) {
+    if (customQuestions && customQuestions.length > 0) {
+      this.questions = [...customQuestions];
+      this.wrongQuestions = [];
+      this.gameStartTime = Date.now();
+      types = Array.from(new Set(customQuestions.map(q => q.type)));
+      diff = 3 as DifficultyLevel;
+      qCount = customQuestions.length;
+      tLimit = 0;
+      adaptive = false;
+    } else if (mode === 'adventure' && level) {
       types = level.questionTypes.filter(t => settings.enabledQuestionTypes.includes(t));
       diff = Math.min(level.difficulty, settings.maxDifficulty) as DifficultyLevel;
       qCount = level.questionCount;
@@ -132,9 +145,16 @@ class GameEngine {
     }
 
     this.currentDifficulty = diff;
-    this.questions = generateQuestionBatch(types, diff, qCount);
-    this.wrongQuestions = [];
-    this.gameStartTime = Date.now();
+    if (!customQuestions || customQuestions.length === 0) {
+      this.questions = generateQuestionBatch(types, diff, qCount);
+      this.wrongQuestions = [];
+      this.gameStartTime = Date.now();
+      this.customQuestionsMode = false;
+    } else {
+      this.customQuestionsMode = true;
+    }
+    this.perTypeStats = {};
+    this.correctQuestionIds = new Set();
 
     this.state = {
       ...this.getInitialState(),
@@ -174,11 +194,20 @@ class GameEngine {
 
     this.state.responseTimes.push(responseTime);
 
+    const qType = question.type;
+    if (!this.perTypeStats[qType]) {
+      this.perTypeStats[qType] = { total: 0, correct: 0 };
+    }
+    this.perTypeStats[qType].total += 1;
+
     let scoreGained = 0;
     let comboGained = 0;
     let encouragement: string | undefined;
 
     if (isCorrect) {
+      this.perTypeStats[qType].correct += 1;
+      this.correctQuestionIds.add(question.id);
+      
       const baseScore = QUESTION_TYPE_CONFIG[question.type].baseScore;
       this.state.combo += 1;
       this.state.maxCombo = Math.max(this.state.maxCombo, this.state.combo);
@@ -251,7 +280,7 @@ class GameEngine {
       this.state.responseTimes.slice(-5)
     );
     
-    if (this.state.mode === 'practice' && this.state.questionIndex % 5 === 0) {
+    if (this.state.enableAdaptive && this.state.mode === 'practice' && this.state.questionIndex % 5 === 0 && this.state.questionIndex > 0) {
       this.currentDifficulty = adjustDifficulty(
         this.currentDifficulty,
         recentAccuracy,
@@ -388,6 +417,14 @@ class GameEngine {
       });
     }
 
+    if (this.questions.length > 0 && this.correctQuestionIds.size > 0 && this.customQuestionsMode) {
+      for (const q of this.questions) {
+        if (this.correctQuestionIds.has(q.id)) {
+          await db.reduceWrongQuestionCount(q.id);
+        }
+      }
+    }
+
     const gameRecord = {
       date: formatDate(new Date()),
       mode: this.state.mode!,
@@ -398,7 +435,8 @@ class GameEngine {
       accuracy,
       avgResponseTime,
       maxCombo: this.state.maxCombo,
-      playTime
+      playTime,
+      perTypeStats: this.perTypeStats
     };
     await db.addGameRecord(gameRecord);
 

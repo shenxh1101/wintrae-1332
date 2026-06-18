@@ -106,6 +106,18 @@ export class MathWizardDatabase extends Dexie {
     await this.wrongQuestions.delete(id);
   }
 
+  async reduceWrongQuestionCount(id: string): Promise<void> {
+    const existing = await this.wrongQuestions.get(id);
+    if (existing) {
+      existing.wrongCount -= 1;
+      if (existing.wrongCount <= 0) {
+        await this.wrongQuestions.delete(id);
+      } else {
+        await this.wrongQuestions.put(existing);
+      }
+    }
+  }
+
   async clearWrongQuestions(): Promise<void> {
     await this.wrongQuestions.clear();
   }
@@ -118,7 +130,7 @@ export class MathWizardDatabase extends Dexie {
       existing.playTime += record.playTime;
       existing.questionsAnswered += record.totalCount;
       existing.correctCount += record.correctCount;
-      existing.accuracy = existing.correctCount / existing.questionsAnswered;
+      existing.accuracy = existing.questionsAnswered > 0 ? existing.correctCount / existing.questionsAnswered : 0;
       await this.dailyStats.put(existing);
     } else {
       const newStats: DailyStats = {
@@ -126,7 +138,7 @@ export class MathWizardDatabase extends Dexie {
         playTime: record.playTime,
         questionsAnswered: record.totalCount,
         correctCount: record.correctCount,
-        accuracy: record.accuracy
+        accuracy: record.totalCount > 0 ? record.correctCount / record.totalCount : 0
       };
       await this.dailyStats.add(newStats);
     }
@@ -149,27 +161,57 @@ export class MathWizardDatabase extends Dexie {
     }
 
     const typeStats: Record<string, QuestionTypeStats> = {};
+    const typeResponseTimes: Record<string, number> = {};
+    const typeWeights: Record<string, number> = {};
 
     for (const record of records) {
-      const type = record.levelId ? `level_${record.levelId}` : record.mode;
-      if (!typeStats[type]) {
-        typeStats[type] = {
-          type: type as any,
-          total: 0,
-          correct: 0,
-          accuracy: 0,
-          avgResponseTime: 0
-        };
+      if (record.perTypeStats && Object.keys(record.perTypeStats).length > 0) {
+        for (const [type, stat] of Object.entries(record.perTypeStats)) {
+          if (!typeStats[type]) {
+            typeStats[type] = {
+              type: type as any,
+              total: 0,
+              correct: 0,
+              accuracy: 0,
+              avgResponseTime: 0
+            };
+            typeResponseTimes[type] = 0;
+            typeWeights[type] = 0;
+          }
+          typeStats[type].total += stat.total;
+          typeStats[type].correct += stat.correct;
+          if (record.avgResponseTime && stat.total > 0) {
+            typeResponseTimes[type] += record.avgResponseTime * stat.total;
+            typeWeights[type] += stat.total;
+          }
+        }
+      } else {
+        const fallbackType = record.levelId ? `level_${record.levelId}` : record.mode;
+        if (!typeStats[fallbackType]) {
+          typeStats[fallbackType] = {
+            type: fallbackType as any,
+            total: 0,
+            correct: 0,
+            accuracy: 0,
+            avgResponseTime: 0
+          };
+          typeResponseTimes[fallbackType] = 0;
+          typeWeights[fallbackType] = 0;
+        }
+        typeStats[fallbackType].total += record.totalCount;
+        typeStats[fallbackType].correct += record.correctCount;
+        if (record.avgResponseTime && record.totalCount > 0) {
+          typeResponseTimes[fallbackType] += record.avgResponseTime * record.totalCount;
+          typeWeights[fallbackType] += record.totalCount;
+        }
       }
-      typeStats[type].total += record.totalCount;
-      typeStats[type].correct += record.correctCount;
-      typeStats[type].avgResponseTime += record.avgResponseTime * record.totalCount;
     }
 
-    return Object.values(typeStats).map(stat => ({
+    return Object.entries(typeStats).map(([type, stat]) => ({
       ...stat,
+      type: type as any,
       accuracy: stat.total > 0 ? stat.correct / stat.total : 0,
-      avgResponseTime: stat.total > 0 ? stat.avgResponseTime / stat.total : 0
+      avgResponseTime: (typeWeights[type] || 0) > 0 ? (typeResponseTimes[type] || 0) / typeWeights[type] : 0
     }));
   }
 

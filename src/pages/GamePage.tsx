@@ -7,7 +7,7 @@ import { GameQuestionRenderer } from '@/components/game/GameQuestionRenderer';
 import { Button } from '@/components/ui/Button';
 import { formatTime } from '@/lib/utils';
 import storage from '@/utils/storage';
-import type { Level, GameMode, QuestionType, DifficultyLevel } from '@/types';
+import type { Level, GameMode, QuestionType, DifficultyLevel, Question } from '@/types';
 
 interface LocationState {
   mode: GameMode;
@@ -17,6 +17,8 @@ interface LocationState {
   questionCount?: number;
   timeLimit?: number;
   enableAdaptive?: boolean;
+  customQuestions?: Question[];
+  isWrongQuestionPractice?: boolean;
 }
 
 const GamePage: React.FC = () => {
@@ -64,7 +66,7 @@ const GamePage: React.FC = () => {
       const limitInfo = await storage.checkDailyLimit();
       setDailyLimitInfo(limitInfo);
       
-      if (!limitInfo.canPlay) {
+      if (!limitInfo.canPlay && !state?.isWrongQuestionPractice) {
         setShowLimitWarning(true);
         return;
       }
@@ -76,7 +78,8 @@ const GamePage: React.FC = () => {
         state.difficulty,
         state.questionCount,
         state.timeLimit,
-        state.enableAdaptive
+        state.enableAdaptive,
+        state.customQuestions
       );
     };
     
@@ -103,12 +106,14 @@ const GamePage: React.FC = () => {
   const handlePlayAgain = useCallback(() => {
     closeResult();
     const checkAndRestart = async () => {
-      const limitInfo = await storage.checkDailyLimit();
-      setDailyLimitInfo(limitInfo);
-      
-      if (!limitInfo.canPlay) {
-        setShowLimitWarning(true);
-        return;
+      if (!state?.isWrongQuestionPractice) {
+        const limitInfo = await storage.checkDailyLimit();
+        setDailyLimitInfo(limitInfo);
+        
+        if (!limitInfo.canPlay) {
+          setShowLimitWarning(true);
+          return;
+        }
       }
       
       if (state?.mode) {
@@ -119,7 +124,8 @@ const GamePage: React.FC = () => {
           state.difficulty,
           state.questionCount,
           state.timeLimit,
-          state.enableAdaptive
+          state.enableAdaptive,
+          state.isWrongQuestionPractice ? state.customQuestions : undefined
         );
       }
     };
@@ -184,6 +190,14 @@ const GamePage: React.FC = () => {
                 <span className="text-2xl">⏱️</span>
                 <span className={`font-display font-bold text-xl ${actualTimeLeft <= 10 ? 'text-white' : 'text-error-600'}`}>
                   {formatTime(actualTimeLeft)}
+                </span>
+              </div>
+            )}
+
+            {state?.isWrongQuestionPractice && (
+              <div className="bg-error-100 border-2 border-error-300 px-4 py-2 rounded-full shadow-md">
+                <span className="font-display font-bold text-error-600">
+                  📝 错题重练
                 </span>
               </div>
             )}
