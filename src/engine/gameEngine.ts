@@ -408,13 +408,15 @@ class GameEngine {
       await storage.addCoins(coinsEarned);
     }
 
-    for (const wrongQ of this.wrongQuestions) {
-      await db.addWrongQuestion({
-        type: wrongQ.type,
-        content: wrongQ.content,
-        userAnswer: wrongQ.userAnswer,
-        correctAnswer: wrongQ.correctAnswer
-      });
+    if (!this.customQuestionsMode) {
+      for (const wrongQ of this.wrongQuestions) {
+        await db.addWrongQuestion({
+          type: wrongQ.type,
+          content: wrongQ.content,
+          userAnswer: wrongQ.userAnswer,
+          correctAnswer: wrongQ.correctAnswer
+        });
+      }
     }
 
     if (this.questions.length > 0 && this.correctQuestionIds.size > 0 && this.customQuestionsMode) {

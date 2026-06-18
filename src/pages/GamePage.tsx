@@ -100,8 +100,12 @@ const GamePage: React.FC = () => {
   }, [state?.mode, isPaused, actualTimeLeft, tick]);
 
   const handleBack = useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
+    if (state?.isWrongQuestionPractice) {
+      navigate('/parent');
+    } else {
+      navigate(-1);
+    }
+  }, [navigate, state]);
 
   const handlePlayAgain = useCallback(() => {
     closeResult();
@@ -383,12 +387,33 @@ const GamePage: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-3">
-                <Button variant="primary" onClick={handlePlayAgain} fullWidth size="lg">
-                  🔄 再来一局
-                </Button>
-                <Button variant="secondary" onClick={handleBack} fullWidth>
-                  返回
-                </Button>
+                {state?.isWrongQuestionPractice && (
+                  <>
+                    <div className="bg-success-100 border-2 border-success-300 rounded-2xl p-3 mb-2">
+                      <p className="text-success-700 font-display text-sm">
+                        ✅ 完成练习！返回家长中心查看更新后的统计和错题次数
+                      </p>
+                    </div>
+                    <Button variant="success" onClick={handleBack} fullWidth size="lg">
+                      📊 返回家长中心
+                    </Button>
+                  </>
+                )}
+                {!state?.isWrongQuestionPractice && (
+                  <Button variant="primary" onClick={handlePlayAgain} fullWidth size="lg">
+                    🔄 再来一局
+                  </Button>
+                )}
+                {!state?.isWrongQuestionPractice && (
+                  <Button variant="secondary" onClick={handleBack} fullWidth>
+                    返回
+                  </Button>
+                )}
+                {state?.isWrongQuestionPractice && (state?.customQuestions?.length ?? 0) > 1 && (
+                  <Button variant="secondary" onClick={handlePlayAgain} fullWidth>
+                    🔄 再练一遍
+                  </Button>
+                )}
               </div>
             </motion.div>
           </motion.div>

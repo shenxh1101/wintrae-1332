@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import db from '@/db';
 import type { QuestionType, DailyStats, DifficultyLevel, WrongQuestion, Question } from '@/types';
-import { formatDate } from '@/utils/helpers';
+import { formatDate, generateOptions } from '@/utils/helpers';
 
 const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   addition: '加法',
@@ -78,17 +78,164 @@ const ParentPage: React.FC = () => {
   };
 
   const wrongQuestionToQuestion = (wq: WrongQuestion): Question => {
-    return {
+    const content = wq.content;
+    const answer = wq.correctAnswer;
+    let num1: number | undefined;
+    let num2: number | undefined;
+    let result: number | undefined;
+    let blankPosition: 'num1' | 'num2' | 'result' = 'result';
+    let operator: string | undefined;
+
+    if (wq.type === 'addition') {
+      const match = content.match(/^(\d+)\s*\+\s*(\d+)\s*=\s*\?$/);
+      if (match) {
+        num1 = parseInt(match[1], 10);
+        num2 = parseInt(match[2], 10);
+        result = num1 + num2;
+        operator = '+';
+      }
+    } else if (wq.type === 'subtraction') {
+      const match = content.match(/^(\d+)\s*-\s*(\d+)\s*=\s*\?$/);
+      if (match) {
+        num1 = parseInt(match[1], 10);
+        num2 = parseInt(match[2], 10);
+        result = num1 - num2;
+        operator = '-';
+      }
+    } else if (wq.type === 'multiplication') {
+      const match = content.match(/^(\d+)\s*[×xX*]\s*(\d+)\s*=\s*\?$/);
+      if (match) {
+        num1 = parseInt(match[1], 10);
+        num2 = parseInt(match[2], 10);
+        result = num1 * num2;
+        operator = '×';
+      }
+    } else if (wq.type === 'division') {
+      const match = content.match(/^(\d+)\s*[÷/]\s*(\d+)\s*=\s*\?$/);
+      if (match) {
+        num1 = parseInt(match[1], 10);
+        num2 = parseInt(match[2], 10);
+        result = num1 / num2;
+        operator = '÷';
+      }
+    } else if (wq.type === 'completion') {
+      if (content.startsWith('?')) {
+        const match = content.match(/^\?\s*([+\-×xX*÷/])\s*(\d+)\s*=\s*(\d+)$/);
+        if (match) {
+          operator = match[1] === 'x' || match[1] === 'X' || match[1] === '*' ? '×' :
+                     match[1] === '/' ? '÷' : match[1];
+          num2 = parseInt(match[2], 10);
+          result = parseInt(match[3], 10);
+          blankPosition = 'num1';
+          if (operator === '+') num1 = result - num2;
+          else if (operator === '-') num1 = result + num2;
+          else if (operator === '×') num1 = result / num2;
+          else if (operator === '÷') num1 = result * num2;
+        }
+      } else if (content.includes('? =')) {
+        const match = content.match(/^(\d+)\s*([+\-×xX*÷/])\s*\?\s*=\s*(\d+)$/);
+        if (match) {
+          num1 = parseInt(match[1], 10);
+          operator = match[2] === 'x' || match[2] === 'X' || match[2] === '*' ? '×' :
+                     match[2] === '/' ? '÷' : match[2];
+          result = parseInt(match[3], 10);
+          blankPosition = 'num2';
+          if (operator === '+') num2 = result - num1;
+          else if (operator === '-') num2 = num1 - result;
+          else if (operator === '×') num2 = result / num1;
+          else if (operator === '÷') num2 = num1 / result;
+        }
+      } else {
+        const match = content.match(/^(\d+)\s*([+\-×xX*÷/])\s*(\d+)\s*=\s*\?$/);
+        if (match) {
+          num1 = parseInt(match[1], 10);
+          operator = match[2] === 'x' || match[2] === 'X' || match[2] === '*' ? '×' :
+                     match[2] === '/' ? '÷' : match[2];
+          num2 = parseInt(match[3], 10);
+          blankPosition = 'result';
+          if (operator === '+') result = num1 + num2;
+          else if (operator === '-') result = num1 - num2;
+          else if (operator === '×') result = num1 * num2;
+          else if (operator === '÷') result = num1 / num2;
+        }
+      }
+    } else if (wq.type === 'pattern') {
+      const parts = content.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+      const numbers: (number | null)[] = parts.map((p, i) => {
+        if (p === '?' || p === '？') return null;
+        const n = parseInt(p, 10);
+        return isNaN(n) ? null : n;
+      });
+      const missingIndex = numbers.findIndex(n => n === null);
+      const answerNum = typeof answer === 'number' ? answer : parseInt(String(answer), 10);
+      
+      return {
+        id: wq.id,
+        type: wq.type,
+        difficulty: wq.difficulty as DifficultyLevel || 3,
+        content: wq.content,
+        answer: answerNum,
+        hint: '观察数字之间的规律，看看每次增加或减少多少',
+        inputType: 'click',
+        options: generateOptions(answerNum),
+        data: {
+          pattern: [...numbers.map(n => n === null ? null : n)],
+          missingIndex,
+          result: answerNum
+        },
+        displayData: {
+          pattern: [...numbers.map(n => n === null ? null : n)],
+          missingIndex
+        }
+      };
+    } else if (wq.type === 'comparison') {
+      const match = content.match(/^(\d+)\s*\?\s*(\d+)$/);
+      if (match) {
+        num1 = parseInt(match[1], 10);
+        num2 = parseInt(match[2], 10);
+      }
+    }
+
+    const answerNum = typeof answer === 'number' ? answer : parseInt(String(answer), 10);
+    const finalNum1 = num1 ?? 0;
+    const finalNum2 = num2 ?? 0;
+    const finalResult = result ?? answerNum;
+    const finalOperator = operator || '+';
+
+    const question: Question = {
       id: wq.id,
       type: wq.type,
-      difficulty: 3,
+      difficulty: wq.difficulty as DifficultyLevel || 3,
       content: wq.content,
-      answer: wq.correctAnswer,
-      hint: '仔细想想，这次一定能做对！',
+      answer: answerNum,
+      hint: wq.type === 'addition' ? `用加法：${finalNum1} + ${finalNum2}` 
+           : wq.type === 'subtraction' ? `用减法：${finalNum1} - ${finalNum2}`
+           : wq.type === 'multiplication' ? `用乘法口诀：${finalNum1} × ${finalNum2}`
+           : wq.type === 'division' ? `用除法：${finalNum1} ÷ ${finalNum2}`
+           : wq.type === 'completion' ? '先想想哪个数是缺失的'
+           : '仔细想想，这次一定能做对！',
       inputType: 'click',
-      options: undefined,
-      data: {}
+      options: generateOptions(answerNum),
+      data: wq.type === 'completion' ? {
+        num1: finalNum1,
+        num2: finalNum2,
+        result: finalResult,
+        blankPosition,
+        operator: finalOperator
+      } : {
+        num1: finalNum1,
+        num2: finalNum2,
+        result: finalResult,
+        operator: finalOperator
+      },
+      displayData: {
+        expression: wq.content,
+        numbers: [finalNum1, finalNum2],
+        operators: [finalOperator]
+      }
     };
+
+    return question;
   };
 
   const handlePracticeSingleWrong = (wq: WrongQuestion) => {

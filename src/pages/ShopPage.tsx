@@ -27,6 +27,23 @@ const ShopPage: React.FC = () => {
     loadAllData();
   }, [loadAllData]);
 
+  const getInventoryCountForItem = (item: ShopItem): number => {
+    if (!item.effect) return 0;
+    
+    let inventoryKey = item.id;
+    if (item.effect.type === 'hint') {
+      inventoryKey = 'prop_hint_1';
+    } else if (item.effect.type === 'skip') {
+      inventoryKey = 'prop_skip_1';
+    } else if (item.effect.type === 'double_coin') {
+      inventoryKey = 'prop_double_coin';
+    } else if (item.effect.type === 'time_extend') {
+      inventoryKey = 'prop_time_extend';
+    }
+    
+    return playerData.inventory?.[inventoryKey] || 0;
+  };
+
   const handlePurchase = async (item: ShopItem) => {
     if (playerData.coins < item.price) {
       setMessage({ type: 'error', text: '金币不足！继续努力赚取金币吧~' });
@@ -142,7 +159,7 @@ const ShopPage: React.FC = () => {
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
             >
               {items.map((item, index) => {
-                const owned = playerData.inventory[item.id] || 0;
+                const owned = getInventoryCountForItem(item);
                 const canAfford = playerData.coins >= item.price;
 
                 return (
