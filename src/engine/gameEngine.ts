@@ -264,7 +264,8 @@ class GameEngine {
 
   nextQuestion(): boolean {
     if (this.state.questionIndex >= this.questions.length - 1) {
-      this.endGame();
+      this.state.isGameOver = true;
+      this.notify();
       return false;
     }
 
@@ -516,7 +517,7 @@ class GameEngine {
       this.state.timeRemaining -= 1;
       this.state.timeLeft = this.state.timeRemaining;
       if (this.state.timeRemaining <= 0) {
-        this.endGame();
+        this.state.isGameOver = true;
       }
       this.notify();
     }

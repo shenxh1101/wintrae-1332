@@ -28,6 +28,7 @@ const GamePage: React.FC = () => {
 
   const [dailyLimitInfo, setDailyLimitInfo] = useState<{ canPlay: boolean; remaining: number; used: number } | null>(null);
   const [showLimitWarning, setShowLimitWarning] = useState(false);
+  const [usingProp, setUsingProp] = useState<'hint' | 'skip' | null>(null);
 
   const {
     engineState,
@@ -50,8 +51,9 @@ const GamePage: React.FC = () => {
   } = useGameStore();
 
   const { playerData, loadPlayerData } = usePlayerStore();
-  const hintCount = playerData.inventory['prop_hint_1'] || 0;
-  const skipCount = playerData.inventory['prop_skip_1'] || 0;
+  const inventory = playerData?.inventory || {};
+  const hintCount = inventory['prop_hint_1'] || 0;
+  const skipCount = inventory['prop_skip_1'] || 0;
 
   const { currentQuestion, score, combo, timeRemaining, timeLeft, totalQuestions, questionIndex, currentQuestionIndex, isPaused, difficulty } = engineState;
   const actualTimeLeft = timeLeft ?? timeRemaining;
@@ -242,16 +244,32 @@ const GamePage: React.FC = () => {
         <div className="flex flex-wrap justify-center gap-4">
           <Button
             variant="secondary"
-            onClick={useHint}
-            disabled={feedback.type !== null || hintCount <= 0}
+            onClick={async () => {
+              if (usingProp) return;
+              setUsingProp('hint');
+              try {
+                await useHint();
+              } finally {
+                setTimeout(() => setUsingProp(null), 300);
+              }
+            }}
+            disabled={feedback.type !== null || hintCount <= 0 || usingProp !== null || showHint}
             icon={<span className="text-2xl">💡</span>}
           >
             提示 ({hintCount})
           </Button>
           <Button
             variant="warning"
-            onClick={skipQuestion}
-            disabled={feedback.type !== null || skipCount <= 0}
+            onClick={async () => {
+              if (usingProp) return;
+              setUsingProp('skip');
+              try {
+                await skipQuestion();
+              } finally {
+                setTimeout(() => setUsingProp(null), 300);
+              }
+            }}
+            disabled={feedback.type !== null || skipCount <= 0 || usingProp !== null}
             icon={<span className="text-2xl">⏭️</span>}
           >
             跳过 ({skipCount})

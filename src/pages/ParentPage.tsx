@@ -83,7 +83,7 @@ const ParentPage: React.FC = () => {
     let num1: number | undefined;
     let num2: number | undefined;
     let result: number | undefined;
-    let blankPosition: 'num1' | 'num2' | 'result' = 'result';
+    let blankPosition: 0 | 1 | 2 = 2;
     let operator: string | undefined;
 
     if (wq.type === 'addition') {
@@ -93,6 +93,7 @@ const ParentPage: React.FC = () => {
         num2 = parseInt(match[2], 10);
         result = num1 + num2;
         operator = '+';
+        blankPosition = 2;
       }
     } else if (wq.type === 'subtraction') {
       const match = content.match(/^(\d+)\s*-\s*(\d+)\s*=\s*\?$/);
@@ -101,6 +102,7 @@ const ParentPage: React.FC = () => {
         num2 = parseInt(match[2], 10);
         result = num1 - num2;
         operator = '-';
+        blankPosition = 2;
       }
     } else if (wq.type === 'multiplication') {
       const match = content.match(/^(\d+)\s*[×xX*]\s*(\d+)\s*=\s*\?$/);
@@ -109,6 +111,7 @@ const ParentPage: React.FC = () => {
         num2 = parseInt(match[2], 10);
         result = num1 * num2;
         operator = '×';
+        blankPosition = 2;
       }
     } else if (wq.type === 'division') {
       const match = content.match(/^(\d+)\s*[÷/]\s*(\d+)\s*=\s*\?$/);
@@ -117,6 +120,7 @@ const ParentPage: React.FC = () => {
         num2 = parseInt(match[2], 10);
         result = num1 / num2;
         operator = '÷';
+        blankPosition = 2;
       }
     } else if (wq.type === 'completion') {
       if (content.startsWith('?')) {
@@ -126,20 +130,20 @@ const ParentPage: React.FC = () => {
                      match[1] === '/' ? '÷' : match[1];
           num2 = parseInt(match[2], 10);
           result = parseInt(match[3], 10);
-          blankPosition = 'num1';
+          blankPosition = 0;
           if (operator === '+') num1 = result - num2;
           else if (operator === '-') num1 = result + num2;
           else if (operator === '×') num1 = result / num2;
           else if (operator === '÷') num1 = result * num2;
         }
-      } else if (content.includes('? =')) {
+      } else if (/^\d+\s*[+\-×xX*÷/]\s*\?\s*=/.test(content)) {
         const match = content.match(/^(\d+)\s*([+\-×xX*÷/])\s*\?\s*=\s*(\d+)$/);
         if (match) {
           num1 = parseInt(match[1], 10);
           operator = match[2] === 'x' || match[2] === 'X' || match[2] === '*' ? '×' :
                      match[2] === '/' ? '÷' : match[2];
           result = parseInt(match[3], 10);
-          blankPosition = 'num2';
+          blankPosition = 1;
           if (operator === '+') num2 = result - num1;
           else if (operator === '-') num2 = num1 - result;
           else if (operator === '×') num2 = result / num1;
@@ -152,7 +156,7 @@ const ParentPage: React.FC = () => {
           operator = match[2] === 'x' || match[2] === 'X' || match[2] === '*' ? '×' :
                      match[2] === '/' ? '÷' : match[2];
           num2 = parseInt(match[3], 10);
-          blankPosition = 'result';
+          blankPosition = 2;
           if (operator === '+') result = num1 + num2;
           else if (operator === '-') result = num1 - num2;
           else if (operator === '×') result = num1 * num2;
@@ -172,19 +176,19 @@ const ParentPage: React.FC = () => {
       return {
         id: wq.id,
         type: wq.type,
-        difficulty: wq.difficulty as DifficultyLevel || 3,
+        difficulty: (wq.difficulty as DifficultyLevel) || 3,
         content: wq.content,
         answer: answerNum,
         hint: '观察数字之间的规律，看看每次增加或减少多少',
         inputType: 'click',
         options: generateOptions(answerNum),
         data: {
-          pattern: [...numbers.map(n => n === null ? null : n)],
+          pattern: [...numbers],
           missingIndex,
           result: answerNum
         },
         displayData: {
-          pattern: [...numbers.map(n => n === null ? null : n)],
+          pattern: [...numbers],
           missingIndex
         }
       };
@@ -202,17 +206,24 @@ const ParentPage: React.FC = () => {
     const finalResult = result ?? answerNum;
     const finalOperator = operator || '+';
 
+    const displayNumbers: (number | null)[] = [finalNum1, finalNum2, finalResult];
+    displayNumbers[blankPosition] = null;
+
+    const operatorType = finalOperator === '+' ? 'addition' :
+                         finalOperator === '-' ? 'subtraction' :
+                         finalOperator === '×' ? 'multiplication' : 'division';
+
     const question: Question = {
       id: wq.id,
       type: wq.type,
-      difficulty: wq.difficulty as DifficultyLevel || 3,
+      difficulty: (wq.difficulty as DifficultyLevel) || 3,
       content: wq.content,
       answer: answerNum,
-      hint: wq.type === 'addition' ? `用加法：${finalNum1} + ${finalNum2}` 
+      hint: wq.type === 'addition' ? `用加法：${finalNum1} + ${finalNum2}`
            : wq.type === 'subtraction' ? `用减法：${finalNum1} - ${finalNum2}`
            : wq.type === 'multiplication' ? `用乘法口诀：${finalNum1} × ${finalNum2}`
            : wq.type === 'division' ? `用除法：${finalNum1} ÷ ${finalNum2}`
-           : wq.type === 'completion' ? '先想想哪个数是缺失的'
+           : wq.type === 'completion' ? '先想想哪个数是缺失的，用逆运算来求'
            : '仔细想想，这次一定能做对！',
       inputType: 'click',
       options: generateOptions(answerNum),
@@ -221,14 +232,19 @@ const ParentPage: React.FC = () => {
         num2: finalNum2,
         result: finalResult,
         blankPosition,
-        operator: finalOperator
+        operator: operatorType
       } : {
         num1: finalNum1,
         num2: finalNum2,
         result: finalResult,
         operator: finalOperator
       },
-      displayData: {
+      displayData: wq.type === 'completion' ? {
+        expression: wq.content,
+        numbers: displayNumbers,
+        operators: [finalOperator],
+        blanks: [blankPosition]
+      } : {
         expression: wq.content,
         numbers: [finalNum1, finalNum2],
         operators: [finalOperator]
