@@ -1,21 +1,31 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useGameStore } from '@/store/useGameStore';
+import { usePlayerStore } from '@/store/usePlayerStore';
 import { GameQuestionRenderer } from '@/components/game/GameQuestionRenderer';
 import { Button } from '@/components/ui/Button';
 import { formatTime } from '@/lib/utils';
-import type { Level, GameMode } from '@/types';
+import storage from '@/utils/storage';
+import type { Level, GameMode, QuestionType, DifficultyLevel } from '@/types';
 
 interface LocationState {
   mode: GameMode;
   level?: Level;
+  questionTypes?: QuestionType[];
+  difficulty?: DifficultyLevel;
+  questionCount?: number;
+  timeLimit?: number;
+  enableAdaptive?: boolean;
 }
 
 const GamePage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const state = location.state as LocationState;
+
+  const [dailyLimitInfo, setDailyLimitInfo] = useState<{ canPlay: boolean; remaining: number; used: number } | null>(null);
+  const [showLimitWarning, setShowLimitWarning] = useState(false);
 
   const {
     engineState,
@@ -37,18 +47,45 @@ const GamePage: React.FC = () => {
     closeHint
   } = useGameStore();
 
+  const { playerData, loadPlayerData } = usePlayerStore();
+  const hintCount = playerData.inventory['prop_hint_1'] || 0;
+  const skipCount = playerData.inventory['prop_skip_1'] || 0;
+
   const { currentQuestion, score, combo, timeRemaining, timeLeft, totalQuestions, questionIndex, currentQuestionIndex, isPaused, difficulty } = engineState;
   const actualTimeLeft = timeLeft ?? timeRemaining;
   const actualQuestionIndex = currentQuestionIndex ?? questionIndex;
 
   useEffect(() => {
-    if (state?.mode) {
-      initGame(state.mode, state.level);
-    }
+    const checkAndStart = async () => {
+      if (!state?.mode) return;
+      
+      loadPlayerData();
+      
+      const limitInfo = await storage.checkDailyLimit();
+      setDailyLimitInfo(limitInfo);
+      
+      if (!limitInfo.canPlay) {
+        setShowLimitWarning(true);
+        return;
+      }
+      
+      initGame(
+        state.mode,
+        state.level,
+        state.questionTypes,
+        state.difficulty,
+        state.questionCount,
+        state.timeLimit,
+        state.enableAdaptive
+      );
+    };
+    
+    checkAndStart();
+    
     return () => {
       resetGame();
     };
-  }, [state, initGame, resetGame]);
+  }, [state, initGame, resetGame, loadPlayerData]);
 
   useEffect(() => {
     if (state?.mode === 'challenge' && !isPaused && actualTimeLeft !== undefined && actualTimeLeft > 0) {
@@ -65,9 +102,28 @@ const GamePage: React.FC = () => {
 
   const handlePlayAgain = useCallback(() => {
     closeResult();
-    if (state?.mode) {
-      initGame(state.mode, state.level);
-    }
+    const checkAndRestart = async () => {
+      const limitInfo = await storage.checkDailyLimit();
+      setDailyLimitInfo(limitInfo);
+      
+      if (!limitInfo.canPlay) {
+        setShowLimitWarning(true);
+        return;
+      }
+      
+      if (state?.mode) {
+        initGame(
+          state.mode,
+          state.level,
+          state.questionTypes,
+          state.difficulty,
+          state.questionCount,
+          state.timeLimit,
+          state.enableAdaptive
+        );
+      }
+    };
+    checkAndRestart();
   }, [state, initGame, closeResult]);
 
   if (isLoading && !currentQuestion) {
@@ -169,18 +225,18 @@ const GamePage: React.FC = () => {
           <Button
             variant="secondary"
             onClick={useHint}
-            disabled={feedback.type !== null}
+            disabled={feedback.type !== null || hintCount <= 0}
             icon={<span className="text-2xl">💡</span>}
           >
-            提示
+            提示 ({hintCount})
           </Button>
           <Button
             variant="warning"
             onClick={skipQuestion}
-            disabled={feedback.type !== null}
+            disabled={feedback.type !== null || skipCount <= 0}
             icon={<span className="text-2xl">⏭️</span>}
           >
-            跳过
+            跳过 ({skipCount})
           </Button>
           {state?.mode === 'challenge' && (
             <Button
@@ -340,6 +396,41 @@ const GamePage: React.FC = () => {
           </motion.div>
         </div>
       )}
+
+      <AnimatePresence>
+        {showLimitWarning && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.5, y: 50 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.5, y: 50 }}
+              className="bg-white rounded-3xl p-8 max-w-md w-full text-center border-4 border-error-200 shadow-2xl"
+            >
+              <div className="text-7xl mb-4">⏰</div>
+              <h2 className="text-3xl font-display font-bold text-error-600 mb-4">
+                今日游戏时间已用完
+              </h2>
+              <p className="text-lg text-gray-600 mb-2">
+                今日已游戏 <span className="font-bold text-error-600">{dailyLimitInfo?.used || 0}</span> 分钟
+              </p>
+              <p className="text-lg text-gray-600 mb-6">
+                每日限制 <span className="font-bold text-primary-600">{(dailyLimitInfo?.used || 0) + (dailyLimitInfo?.remaining || 0)}</span> 分钟
+              </p>
+              <p className="text-gray-500 mb-6">
+                休息一下眼睛，明天再来挑战吧！👀
+              </p>
+              <Button variant="primary" onClick={handleBack} fullWidth size="lg">
+                返回主页
+              </Button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

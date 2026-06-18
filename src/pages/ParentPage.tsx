@@ -5,7 +5,7 @@ import { usePlayerStore } from '@/store/usePlayerStore';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import db from '@/db';
-import type { QuestionType, DailyStats, OverallStats, DifficultyLevel } from '@/types';
+import type { QuestionType, DailyStats, DifficultyLevel, WrongQuestion } from '@/types';
 import { formatDate } from '@/utils/helpers';
 
 const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
@@ -32,7 +32,9 @@ const ParentPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'overview' | 'settings' | 'data'>('overview');
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
-  const [overallStats, setOverallStats] = useState<OverallStats | null>(null);
+  const [overallStats, setOverallStats] = useState<any>(null);
+  const [wrongQuestions, setWrongQuestions] = useState<WrongQuestion[]>([]);
+  const [typeStats, setTypeStats] = useState<any[]>([]);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [selectedTypes, setSelectedTypes] = useState<QuestionType[]>([]);
   const [dailyLimit, setDailyLimit] = useState(30);
@@ -60,12 +62,16 @@ const ParentPage: React.FC = () => {
     try {
       const today = new Date();
       const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const [stats, overall] = await Promise.all([
+      const [stats, overall, wrongQ, tStats] = await Promise.all([
         db.getDailyStats(formatDate(weekAgo), formatDate(today)),
-        db.getOverallStats()
+        db.getOverallStats(),
+        db.getWrongQuestions(10),
+        db.getQuestionTypeStats()
       ]);
       setDailyStats(stats);
-      setOverallStats(overall as any);
+      setOverallStats(overall);
+      setWrongQuestions(wrongQ);
+      setTypeStats(tStats);
     } catch (error) {
       console.error('加载数据失败:', error);
     }
@@ -120,11 +126,15 @@ const ParentPage: React.FC = () => {
     return null;
   }
 
-  const avgAccuracy = overallStats?.totalQuestions
+  const avgAccuracy = overallStats?.overallAccuracy
+    ? Math.round(overallStats.overallAccuracy * 100)
+    : overallStats?.totalQuestions
     ? Math.round((overallStats.correctAnswers / overallStats.totalQuestions) * 100)
     : 0;
 
-  const avgTime = overallStats?.totalQuestions
+  const avgTime = overallStats?.avgResponseTime
+    ? overallStats.avgResponseTime.toFixed(1)
+    : overallStats?.totalQuestions && overallStats?.totalTime
     ? (overallStats.totalTime / overallStats.totalQuestions).toFixed(1)
     : '0';
 
@@ -174,8 +184,8 @@ const ParentPage: React.FC = () => {
                 <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white">
                   <div className="p-6 text-center">
                     <div className="text-4xl mb-2">🏆</div>
-                    <div className="text-4xl font-display font-bold">{overallStats?.totalScore || 0}</div>
-                    <div className="opacity-90">总得分</div>
+                    <div className="text-4xl font-display font-bold">{overallStats?.totalGames || 0}</div>
+                    <div className="opacity-90">总游戏次数</div>
                   </div>
                 </Card>
                 <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white">
@@ -445,31 +455,32 @@ const ParentPage: React.FC = () => {
                   <h3 className="text-2xl font-display font-bold text-gray-700 mb-4">
                     📈 题型正确率分析
                   </h3>
-                  {overallStats?.typeStats && Object.entries(overallStats.typeStats).length > 0 ? (
+                  {typeStats && typeStats.length > 0 ? (
                     <div className="space-y-4">
-                      {(Object.entries(overallStats.typeStats) as [QuestionType, { total: number; correct: number }][]).map(([type, stats]) => {
-                        const accuracy = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
+                      {typeStats.map((stat: any, index: number) => {
+                        const accuracy = stat.total > 0 ? Math.round((stat.correct / stat.total) * 100) : 0;
                         const getColor = () => {
                           if (accuracy >= 80) return 'from-green-400 to-green-500';
                           if (accuracy >= 60) return 'from-yellow-400 to-yellow-500';
                           return 'from-red-400 to-red-500';
                         };
+                        const typeName = QUESTION_TYPE_LABELS[stat.type as QuestionType] || stat.type;
 
                         return (
-                          <div key={type}>
+                          <div key={stat.type || index}>
                             <div className="flex justify-between mb-1">
                               <span className="font-display font-bold text-gray-700">
-                                {QUESTION_TYPE_LABELS[type]}
+                                {typeName}
                               </span>
                               <span className="font-display font-bold text-gray-600">
-                                {stats.correct}/{stats.total} ({accuracy}%)
+                                {stat.correct}/{stat.total} ({accuracy}%)
                               </span>
                             </div>
                             <div className="h-6 bg-gray-100 rounded-full overflow-hidden">
                               <motion.div
                                 initial={{ width: 0 }}
                                 animate={{ width: `${accuracy}%` }}
-                                transition={{ duration: 0.8 }}
+                                transition={{ duration: 0.8, delay: index * 0.1 }}
                                 className={`h-full bg-gradient-to-r ${getColor()} rounded-full`}
                               />
                             </div>
@@ -479,7 +490,7 @@ const ParentPage: React.FC = () => {
                     </div>
                   ) : (
                     <div className="text-center py-8 text-gray-400">
-                      暂无数据
+                      暂无数据，开始学习后这里会显示统计
                     </div>
                   )}
                 </div>
@@ -490,10 +501,45 @@ const ParentPage: React.FC = () => {
                   <h3 className="text-2xl font-display font-bold text-gray-700 mb-4">
                     ⚠️ 常错题
                   </h3>
-                  <div className="text-center py-4 text-gray-500">
-                    <p>功能开发中...</p>
-                    <p className="text-sm mt-2">这里将展示孩子经常做错的题目类型</p>
-                  </div>
+                  {wrongQuestions.length > 0 ? (
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {wrongQuestions.map((q, index) => (
+                        <motion.div
+                          key={q.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="bg-error-50 border-2 border-error-200 rounded-2xl p-4"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="bg-error-500 text-white text-xs px-2 py-1 rounded-full font-display">
+                                  {QUESTION_TYPE_LABELS[q.type] || q.type}
+                                </span>
+                                <span className="text-error-600 text-sm font-display font-bold">
+                                  错 {q.wrongCount} 次
+                                </span>
+                              </div>
+                              <div className="text-lg font-display text-gray-700">
+                                {q.content}
+                              </div>
+                              <div className="mt-2 text-sm">
+                                <span className="text-error-600">你的答案: {q.userAnswer}</span>
+                                <span className="mx-2 text-gray-400">|</span>
+                                <span className="text-success-600">正确答案: {q.correctAnswer}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-400">
+                      <div className="text-5xl mb-2">🎉</div>
+                      <p>太棒了！暂无常错题</p>
+                    </div>
+                  )}
                 </div>
               </Card>
 

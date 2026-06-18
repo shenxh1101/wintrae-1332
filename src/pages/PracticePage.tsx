@@ -59,7 +59,9 @@ const PracticePage: React.FC = () => {
       state: {
         mode: 'practice' as const,
         questionTypes: selectedTypes,
-        difficulty: selectedDifficulty
+        difficulty: selectedDifficulty,
+        questionCount: questionCount,
+        enableAdaptive: enableAdaptive
       }
     });
   };

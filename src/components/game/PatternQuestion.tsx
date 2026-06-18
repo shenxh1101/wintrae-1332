@@ -27,12 +27,21 @@ export const PatternQuestion: React.FC<PatternQuestionProps> = ({
   }, [disabled, onSubmit]);
 
   const { pattern, missingIndex } = question.displayData || question.data || {};
+  const displayPattern = pattern || [];
   const answer = typeof question.answer === 'number' ? question.answer : parseInt(String(question.answer), 10);
   const options = generateOptions(answer);
 
   const getEmoji = (index: number): string => {
     const emojis = ['🌟', '🎈', '🎨', '🎯', '🎪', '🎁', '🎠', '🎡', '🎢', '🎃'];
     return emojis[index % emojis.length];
+  };
+
+  const isMissing = (index: number): boolean => {
+    if (typeof missingIndex === 'number') {
+      return index === missingIndex;
+    }
+    const val = displayPattern[index];
+    return val === null || val === undefined || isNaN(Number(val));
   };
 
   return (
@@ -51,7 +60,7 @@ export const PatternQuestion: React.FC<PatternQuestionProps> = ({
         </div>
         
         <div className="flex flex-wrap items-center justify-center gap-3 md:gap-4 mb-4">
-          {pattern?.map((num: number, index: number) => (
+          {displayPattern.map((num: number | null, index: number) => (
             <motion.div
               key={index}
               initial={{ opacity: 0, scale: 0, rotate: -10 }}
@@ -59,11 +68,10 @@ export const PatternQuestion: React.FC<PatternQuestionProps> = ({
               transition={{ delay: index * 0.15, type: 'spring' }}
               className={`
                 flex flex-col items-center min-w-[80px] md:min-w-[100px]
-                ${index === missingIndex ? '' : ''}
               `}
             >
               <span className="text-2xl mb-1">{getEmoji(index)}</span>
-              {index === missingIndex ? (
+              {isMissing(index) ? (
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: [1, 1.2, 1] }}
@@ -82,7 +90,7 @@ export const PatternQuestion: React.FC<PatternQuestionProps> = ({
         </div>
 
         <p className="text-xl text-gray-600 font-display mt-4">
-          按照规律，第 {missingIndex! + 1} 个数应该是多少？
+          按照规律，第 {(typeof missingIndex === 'number' ? missingIndex : displayPattern.length - 1) + 1} 个数应该是多少？
         </p>
       </motion.div>
 

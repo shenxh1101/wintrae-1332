@@ -90,7 +90,10 @@ class GameEngine {
     mode: GameMode,
     level?: Level,
     questionTypes?: QuestionType[],
-    difficulty?: DifficultyLevel
+    difficulty?: DifficultyLevel,
+    questionCount?: number,
+    timeLimit?: number,
+    enableAdaptive?: boolean
   ): Promise<void> {
     const settings = await storage.getUserSettings();
     this.voiceEnabled = settings.voiceEnabled;
@@ -98,26 +101,30 @@ class GameEngine {
 
     let types: QuestionType[];
     let diff: DifficultyLevel;
-    let questionCount: number;
-    let timeLimit: number;
+    let qCount: number;
+    let tLimit: number;
+    let adaptive: boolean;
 
     if (mode === 'adventure' && level) {
       types = level.questionTypes.filter(t => settings.enabledQuestionTypes.includes(t));
       diff = Math.min(level.difficulty, settings.maxDifficulty) as DifficultyLevel;
-      questionCount = level.questionCount;
-      timeLimit = level.timeLimit;
+      qCount = level.questionCount;
+      tLimit = level.timeLimit;
+      adaptive = false;
       this.state.currentLevelId = level.levelId;
     } else if (mode === 'practice') {
       types = questionTypes?.filter(t => settings.enabledQuestionTypes.includes(t)) ||
               settings.enabledQuestionTypes;
-      diff = difficulty || 3;
-      questionCount = GAME_CONFIG.PRACTICE_QUESTION_COUNT;
-      timeLimit = 0;
+      diff = (difficulty || 3) as DifficultyLevel;
+      qCount = questionCount || GAME_CONFIG.PRACTICE_QUESTION_COUNT;
+      tLimit = 0;
+      adaptive = enableAdaptive ?? true;
     } else {
       types = settings.enabledQuestionTypes;
       diff = (difficulty || 5) as DifficultyLevel;
-      questionCount = GAME_CONFIG.CHALLENGE_MAX_QUESTIONS;
-      timeLimit = GAME_CONFIG.CHALLENGE_TIME_LIMIT;
+      qCount = GAME_CONFIG.CHALLENGE_MAX_QUESTIONS;
+      tLimit = timeLimit || GAME_CONFIG.CHALLENGE_TIME_LIMIT;
+      adaptive = false;
     }
 
     if (types.length === 0) {
@@ -125,23 +132,23 @@ class GameEngine {
     }
 
     this.currentDifficulty = diff;
-    this.questions = generateQuestionBatch(types, diff, questionCount);
+    this.questions = generateQuestionBatch(types, diff, qCount);
     this.wrongQuestions = [];
     this.gameStartTime = Date.now();
 
     this.state = {
       ...this.getInitialState(),
       mode,
-      totalQuestions: questionCount,
-      timeRemaining: timeLimit,
-      timeLeft: timeLimit,
+      totalQuestions: qCount,
+      timeRemaining: tLimit,
+      timeLeft: tLimit,
       selectedQuestionTypes: types,
       questionStartTime: Date.now(),
       difficulty: diff,
-      enableAdaptive: mode === 'practice'
+      enableAdaptive: adaptive
     };
 
-    if (questionCount > 0) {
+    if (qCount > 0) {
       this.state.currentQuestion = this.questions[0];
       if (this.voiceEnabled) {
         setTimeout(() => speakQuestion(this.questions[0].content, this.voiceEnabled), 500);
@@ -276,14 +283,6 @@ class GameEngine {
   useHint(): string | null {
     if (!this.state.currentQuestion) return null;
     
-    const hintItemId = 'prop_hint_1';
-    const playerData = storage.getPlayerData();
-    
-    if ((playerData as any).inventory?.[hintItemId] <= 0) {
-      return null;
-    }
-
-    storage.useItemFromInventory(hintItemId);
     this.state.usedHints += 1;
     
     const hint = this.state.currentQuestion.hint || '仔细想想，你一定能做出来的！';
@@ -292,15 +291,6 @@ class GameEngine {
   }
 
   skipQuestion(): boolean {
-    const skipItemId = 'prop_skip_1';
-    const playerData = storage.getPlayerData();
-    
-    if ((playerData as any).inventory?.[skipItemId] <= 0) {
-      return false;
-    }
-
-    storage.useItemFromInventory(skipItemId);
-    
     if (this.state.currentQuestion) {
       this.wrongQuestions = this.wrongQuestions.filter(
         q => q.id !== this.state.currentQuestion!.id
@@ -412,6 +402,9 @@ class GameEngine {
     };
     await db.addGameRecord(gameRecord);
 
+    const playMinutes = Math.ceil(playTime / 60);
+    await storage.addTodayPlayTime(playMinutes);
+
     const today = formatDate(new Date());
     const playerData = await storage.getPlayerData();
     const lastDate = playerData.lastPlayDate;
@@ -434,7 +427,7 @@ class GameEngine {
     await storage.setPlayerData({
       lastPlayDate: today,
       streakDays,
-      totalPlayTime: playerData.totalPlayTime + Math.ceil(playTime / 60)
+      totalPlayTime: playerData.totalPlayTime + playMinutes
     });
 
     if (this.voiceEnabled) {

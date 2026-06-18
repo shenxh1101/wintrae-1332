@@ -21,12 +21,15 @@ interface GameStore {
     mode: GameMode,
     level?: Level,
     questionTypes?: QuestionType[],
-    difficulty?: DifficultyLevel
+    difficulty?: DifficultyLevel,
+    questionCount?: number,
+    timeLimit?: number,
+    enableAdaptive?: boolean
   ) => Promise<void>;
   submitAnswer: (answer: string | number) => void;
   nextQuestion: () => void;
-  useHint: () => void;
-  skipQuestion: () => void;
+  useHint: () => Promise<boolean>;
+  skipQuestion: () => Promise<boolean>;
   pauseGame: () => void;
   resumeGame: () => void;
   endGame: () => Promise<void>;
@@ -52,10 +55,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   hintText: null,
   showResult: false,
 
-  initGame: async (mode, level, questionTypes, difficulty) => {
+  initGame: async (mode, level, questionTypes, difficulty, questionCount, timeLimit, enableAdaptive) => {
     set({ isLoading: true, error: null, showResult: false, gameResult: null });
     try {
-      await gameEngine.initGame(mode, level, questionTypes, difficulty);
+      await gameEngine.initGame(mode, level, questionTypes, difficulty, questionCount, timeLimit, enableAdaptive);
       set({ engineState: gameEngine.getState(), isLoading: false });
     } catch (error) {
       set({
@@ -92,16 +95,44 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
   },
 
-  useHint: () => {
+  useHint: async () => {
+    const playerStore = usePlayerStore.getState();
+    const inventory = playerStore.playerData.inventory;
+    const hintCount = inventory['prop_hint_1'] || inventory['prop_hint_5'] || 0;
+    
+    if (hintCount <= 0) {
+      return false;
+    }
+    
     const hint = gameEngine.useHint();
     if (hint) {
+      await playerStore.useItem('prop_hint_1');
       set({ showHint: true, hintText: hint, engineState: gameEngine.getState() });
+      return true;
     }
+    return false;
   },
 
-  skipQuestion: () => {
-    gameEngine.skipQuestion();
-    set({ engineState: gameEngine.getState() });
+  skipQuestion: async () => {
+    const playerStore = usePlayerStore.getState();
+    const inventory = playerStore.playerData.inventory;
+    const skipCount = inventory['prop_skip_1'] || 0;
+    
+    if (skipCount <= 0) {
+      return false;
+    }
+    
+    const success = gameEngine.skipQuestion();
+    if (success) {
+      await playerStore.useItem('prop_skip_1');
+      set({ engineState: gameEngine.getState() });
+      
+      if (!gameEngine.getState().currentQuestion) {
+        await get().endGame();
+      }
+      return true;
+    }
+    return false;
   },
 
   pauseGame: () => {

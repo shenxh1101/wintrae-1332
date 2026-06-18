@@ -28,10 +28,11 @@ export const CompletionQuestion: React.FC<CompletionQuestionProps> = ({
 
   const { numbers, operators, blanks } = question.displayData || {};
   const data = question.data || {};
-  const num1 = numbers?.[0] ?? data.num1;
-  const num2 = numbers?.[1] ?? data.num2;
+  const num1 = data.num1;
+  const num2 = data.num2;
   const result = data.result;
   const operator = operators?.[0] ?? data.operator;
+  const blankPosition = data.blankPosition;
   const answer = typeof question.answer === 'number' ? question.answer : parseInt(String(question.answer), 10);
   const options = generateOptions(answer);
 
@@ -39,12 +40,16 @@ export const CompletionQuestion: React.FC<CompletionQuestionProps> = ({
     addition: '+',
     subtraction: '−',
     multiplication: '×',
-    division: '÷'
+    division: '÷',
+    '+': '+',
+    '-': '−',
+    '×': '×',
+    '÷': '÷'
   };
 
-  const hasMissingNum1 = num1 === null || num1 === undefined;
-  const hasMissingNum2 = num2 === null || num2 === undefined;
-  const hasMissingResult = result === null || result === undefined;
+  const hasMissingNum1 = blankPosition === 0 || blanks?.includes(0);
+  const hasMissingNum2 = blankPosition === 1 || blanks?.includes(1);
+  const hasMissingResult = blankPosition === 2 || blanks?.includes(2);
 
   return (
     <div className="w-full max-w-4xl mx-auto">

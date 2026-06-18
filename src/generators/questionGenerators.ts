@@ -167,8 +167,14 @@ function generatePatternQuestion(difficulty: DifficultyLevel): Question {
     options: generateOptions(answer, 4, [-10, 10]),
     hint: `看看相邻两个数之间的差或比值有什么规律`,
     inputType: 'click',
+    data: {
+      pattern: [...pattern],
+      missingIndex: pattern.length,
+      result: answer
+    },
     displayData: {
-      pattern: [...pattern, NaN]
+      pattern: [...pattern, null],
+      missingIndex: pattern.length
     }
   };
 }
@@ -233,9 +239,10 @@ function generateCompletionQuestion(difficulty: DifficultyLevel): Question {
     hint: `可以把问号当作未知数，用逆运算来求解`,
     inputType: 'click',
     data: {
-      num1: blankPosition === 0 ? null : a,
-      num2: blankPosition === 1 ? null : b,
-      result: blankPosition === 2 ? null : answer,
+      num1: a,
+      num2: b,
+      result: answer,
+      blankPosition,
       operator: operator === '+' ? 'addition' : operator === '-' ? 'subtraction' : operator === '×' ? 'multiplication' : 'division'
     },
     displayData: {
